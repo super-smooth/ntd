@@ -168,7 +168,15 @@ This project uses [gomod2nix](https://github.com/nix-community/gomod2nix) to man
    git add gomod2nix.toml
    ```
 
-The CI will verify that `gomod2nix.toml` is always in sync with `go.mod`.
+### CI Workflows
+
+Two GitHub Actions workflows manage dependency updates:
+
+1. **gomod2nix.yml**: Automatically updates `gomod2nix.toml` when `go.mod` changes in a PR (runs only the necessary update, not full tests)
+
+2. **ci.yml**: Runs the full test suite (tests, lint, builds) - optimized to skip on the first run of go.mod PRs and only run after the bot commits the updated `gomod2nix.toml`
+
+This prevents running the full test suite twice when dependencies change.
 
 ## License
 
