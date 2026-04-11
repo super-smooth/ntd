@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-gomod2nix:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31.8.2
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Check gomod2nix.toml is up to date
+      run: |
+        nix develop --command ./scripts/check-gomod2nix.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31.8.2
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Check formatting
+      run: |
+        nix develop --command gofumpt -l .
+    
+    - name: Run golangci-lint
+      run: |
+        nix develop --command golangci-lint run ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31.8.2
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Run tests
+      run: |
+        nix develop --command go test -v ./...
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v31.8.2
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build with Nix
+      run: |
+        nix build .#packages.x86_64-linux.default
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ntd-x86_64-linux
+        path: result/bin/ntd

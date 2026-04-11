@@ -1,0 +1,18 @@
+# Lefthook configuration
+# See: https://github.com/evilmartians/lefthook
+commit-msg:
+  commands:
+    commitlint:
+      run: commitlint --edit {1}
+pre-commit:
+  parallel: true
+  commands:
+    gomod2nix:
+      glob: "go.{mod,sum}"
+      run: go mod tidy && gomod2nix generate && git add gomod2nix.toml
+    lint:
+      run: golangci-lint run --fix
+    format:
+      run: gofumpt -l -w .
+    git-add:
+      run: git add -A

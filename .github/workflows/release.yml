@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31.8.2
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build for x86_64-linux
+        run: |
+          nix build .#packages.x86_64-linux.default
+          mkdir -p dist
+          cp result/bin/ntd dist/ntd-x86_64-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ntd-x86_64-linux
+          path: dist/
+
+  build-darwin:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31.8.2
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build for ${{ matrix.arch }}-darwin
+        run: |
+          nix build .#packages.${{ matrix.arch }}-darwin.default
+          mkdir -p dist
+          cp result/bin/ntd dist/ntd-${{ matrix.arch }}-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ntd-${{ matrix.arch }}-darwin
+          path: dist/
+
+  release:
+    needs: [build-linux, build-darwin]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+      - name: Create archives
+        run: |
+          mkdir -p dist
+          for artifact in artifacts/*/; do
+            binary=$(find "$artifact" -name "ntd-*" -type f)
+            if [ -n "$binary" ]; then
+              basename=$(basename "$binary")
+              system=${basename#ntd-}
+              case $system in
+                x86_64-linux) archive="ntd_Linux_x86_64.tar.gz" ;;
+                x86_64-darwin) archive="ntd_Darwin_x86_64.tar.gz" ;;
+                aarch64-darwin) archive="ntd_Darwin_arm64.tar.gz" ;;
+              esac
+              cp "$binary" ntd
+              tar czf "dist/$archive" ntd
+              rm ntd
+            fi
+          done
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew-tap:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Federate token from Octo STS
+        uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f
+        id: octo-sts
+        with:
+          scope: super-smooth/homebrew-tap
+          identity: update-ntd-version
+      - name: Checkout homebrew-tap repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+          repository: super-smooth/homebrew-tap
+          path: homebrew-tap
+      - name: Update Homebrew formula
+        run: |
+          cd homebrew-tap
+          VERSION=${GITHUB_REF#refs/tags/v}
+          curl -L -o darwin_x86_64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Darwin_x86_64.tar.gz"
+          curl -L -o darwin_arm64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Darwin_arm64.tar.gz"
+          curl -L -o linux_x86_64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Linux_x86_64.tar.gz"
+          DARWIN_X86_64_SHA=$(sha256sum darwin_x86_64.tar.gz | cut -d' ' -f1)
+          DARWIN_ARM64_SHA=$(sha256sum darwin_arm64.tar.gz | cut -d' ' -f1)
+          LINUX_X86_64_SHA=$(sha256sum linux_x86_64.tar.gz | cut -d' ' -f1)
+          sed -i "s|download/v[^/]*/|download/v${VERSION}/|g" Formula/ntd.rb
+          sed -i '/Darwin_arm64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${DARWIN_ARM64_SHA}"'"/' Formula/ntd.rb
+          sed -i '/Darwin_x86_64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${DARWIN_X86_64_SHA}"'"/' Formula/ntd.rb
+          sed -i '/Linux_x86_64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${LINUX_X86_64_SHA}"'"/' Formula/ntd.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/ntd.rb
+          git commit -m "chore: Update ntd to v${VERSION}"
+          git push
