@@ -48,7 +48,7 @@ jobs:
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
             git config --local user.name "github-actions[bot]"
             git add gomod2nix.toml
-            git commit -m "chore: update gomod2nix.toml"
+            git commit -m "chore: update gomod2nix.toml" --no-verify
             git push
             echo "✅ gomod2nix.toml has been updated and committed"
           fi
