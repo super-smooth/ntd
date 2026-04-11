@@ -1,0 +1,26 @@
+name: Lint Commit Messages
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  commitlint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: Lint commit messages
+        run: |-
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PRs, check all commits in the PR
+            nix develop --command commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          else
+            # For pushes, check the last commit
+            nix develop --command commitlint --from HEAD~1 --to HEAD --verbose
+          fi
