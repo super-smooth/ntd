@@ -34,8 +34,9 @@ jobs:
           if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "^go\\.mod$"; then
             echo "go.mod was modified in this PR"
             
-            # Check if this commit is by the bot
-            COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
+            # Check if the HEAD commit is by the bot
+            COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
+            echo "Commit author: $COMMIT_AUTHOR"
             if [ "$COMMIT_AUTHOR" = "$BOT_NAME" ]; then
               echo "This is a bot commit, running normally"
               echo "should-skip=false" >> $GITHUB_OUTPUT
