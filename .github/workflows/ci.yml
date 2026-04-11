@@ -16,11 +16,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Check out the actual PR head, not the merge commit
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check if we should skip expensive jobs
         id: check
         run: |
           BOT_NAME="${{ vars.BOT_NAME || 'super-smooth-bot' }}"
+          
+          echo "=== Debug Info ==="
+          echo "Event name: ${{ github.event_name }}"
+          echo "Base ref: ${{ github.base_ref }}"
+          echo "PR head SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "BOT_NAME: $BOT_NAME"
+          echo ""
+          echo "=== Recent commits ==="
+          git log --oneline -5
+          echo ""
           
           # Only skip on pull_request events
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -31,17 +43,28 @@ jobs:
           
           # Check if go.mod was modified in this PR
           git fetch origin ${{ github.base_ref }}
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "^go\\.mod$"; then
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "=== Changed files ==="
+          echo "$CHANGED_FILES"
+          echo ""
+          
+          if echo "$CHANGED_FILES" | grep -q "^go\\.mod$"; then
             echo "go.mod was modified in this PR"
             
             # Check if the HEAD commit is by the bot
             COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
-            echo "Commit author: $COMMIT_AUTHOR"
+            COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae')
+            echo "=== Commit details ==="
+            echo "Commit author name: '$COMMIT_AUTHOR'"
+            echo "Commit author email: '$COMMIT_EMAIL'"
+            echo "Expected bot name: '$BOT_NAME'"
+            echo ""
+            
             if [ "$COMMIT_AUTHOR" = "$BOT_NAME" ]; then
               echo "This is a bot commit, running normally"
               echo "should-skip=false" >> $GITHUB_OUTPUT
             else
-              echo "This is not a bot commit, skipping expensive jobs"
+              echo "This is not a bot commit (author mismatch), skipping expensive jobs"
               echo "should-skip=true" >> $GITHUB_OUTPUT
             fi
           else
