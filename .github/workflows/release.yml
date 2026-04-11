@@ -11,19 +11,22 @@ permissions:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31.8.2
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build for x86_64-linux
+      - name: Build for ${{ matrix.arch }}-linux
         run: |
-          nix build .#packages.x86_64-linux.default
+          nix build .#packages.${{ matrix.arch }}-linux.default
           mkdir -p dist
-          cp result/bin/ntd dist/ntd-x86_64-linux
+          cp result/bin/ntd dist/ntd-${{ matrix.arch }}-linux
       - uses: actions/upload-artifact@v4
         with:
-          name: ntd-x86_64-linux
+          name: ntd-${{ matrix.arch }}-linux
           path: dist/
 
   build-darwin:
@@ -64,6 +67,7 @@ jobs:
               system=${basename#ntd-}
               case $system in
                 x86_64-linux) archive="ntd_Linux_x86_64.tar.gz" ;;
+                aarch64-linux) archive="ntd_Linux_arm64.tar.gz" ;;
                 x86_64-darwin) archive="ntd_Darwin_x86_64.tar.gz" ;;
                 aarch64-darwin) archive="ntd_Darwin_arm64.tar.gz" ;;
               esac
@@ -104,13 +108,16 @@ jobs:
           curl -L -o darwin_x86_64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Darwin_x86_64.tar.gz"
           curl -L -o darwin_arm64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Darwin_arm64.tar.gz"
           curl -L -o linux_x86_64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Linux_x86_64.tar.gz"
+          curl -L -o linux_arm64.tar.gz "https://github.com/super-smooth/ntd/releases/download/v${VERSION}/ntd_Linux_arm64.tar.gz"
           DARWIN_X86_64_SHA=$(sha256sum darwin_x86_64.tar.gz | cut -d' ' -f1)
           DARWIN_ARM64_SHA=$(sha256sum darwin_arm64.tar.gz | cut -d' ' -f1)
           LINUX_X86_64_SHA=$(sha256sum linux_x86_64.tar.gz | cut -d' ' -f1)
+          LINUX_ARM64_SHA=$(sha256sum linux_arm64.tar.gz | cut -d' ' -f1)
           sed -i "s|download/v[^/]*/|download/v${VERSION}/|g" Formula/ntd.rb
           sed -i '/Darwin_arm64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${DARWIN_ARM64_SHA}"'"/' Formula/ntd.rb
           sed -i '/Darwin_x86_64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${DARWIN_X86_64_SHA}"'"/' Formula/ntd.rb
           sed -i '/Linux_x86_64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${LINUX_X86_64_SHA}"'"/' Formula/ntd.rb
+          sed -i '/Linux_arm64\.tar\.gz/,/sha256/ s/sha256.*/sha256 "'"${LINUX_ARM64_SHA}"'"/' Formula/ntd.rb
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/ntd.rb
