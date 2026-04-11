@@ -1,0 +1,100 @@
+name: Update gomod2nix.toml
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.21.6'
+  BOT_NAME: ${{ vars.BOT_NAME || 'super-smooth-bot' }}
+  BOT_EMAIL: ${{ vars.BOT_EMAIL || 'super-smooth-bot@anomaly.co' }}
+
+jobs:
+  check-gomod2nix:
+    name: Check gomod2nix.toml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Check if go.mod changed
+        id: check-go-mod
+        run: |
+          # Get list of changed files in this PR
+          git fetch origin ${{ github.base_ref }}
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          if echo "$CHANGED_FILES" | grep -q "^go\\.mod$"; then
+            echo "go.mod was modified"
+            echo "go-mod-changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "go.mod was not modified"
+            echo "go-mod-changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Nix
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Restore and save Nix store
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+
+      - name: Install direnv
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        run: |
+          curl -sfL https://direnv.net/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Allow direnv
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        run: direnv allow
+
+      - name: Import GPG key
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        id: import-gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+        continue-on-error: true
+
+      - name: Check and update gomod2nix.toml
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        run: |
+          # Generate fresh gomod2nix.toml
+          direnv exec . gomod2nix generate
+
+          # Check if there are changes
+          if git diff --quiet gomod2nix.toml; then
+            echo "✅ gomod2nix.toml is up to date!"
+          else
+            echo "📝 gomod2nix.toml was updated"
+            git config --local user.email "$BOT_EMAIL"
+            git config --local user.name "$BOT_NAME"
+            git add gomod2nix.toml
+            if [ "${{ steps.import-gpg.outcome }}" == "success" ]; then
+              git commit -S -m "chore: update gomod2nix.toml" --no-verify
+            else
+              git commit -m "chore: update gomod2nix.toml" --no-verify
+            fi
+            git push
+            echo "✅ gomod2nix.toml has been updated and committed"
+          fi

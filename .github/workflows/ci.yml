@@ -4,72 +4,54 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-env:
-  BOT_NAME: ${{ vars.BOT_NAME || 'super-smooth-bot' }}
-  BOT_EMAIL: ${{ vars.BOT_EMAIL || 'super-smooth-bot@anomaly.co' }}
+
 jobs:
-  check-gomod2nix:
-    name: Check gomod2nix.toml
+  check-prerequisites:
+    name: Check PR prerequisites
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      should-skip: ${{ steps.check.outputs.should-skip }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-      - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
-        with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          gc-max-store-size-linux: 1G
-          purge: true
-          purge-prefixes: nix-${{ runner.os }}-
-          purge-created: 0
-          purge-last-accessed: 0
-          purge-primary-key: never
-      - name: Install direnv
-        run: |
-          curl -sfL https://direnv.net/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Allow direnv
-        run: direnv allow
-      - name: Import GPG key
-        id: import-gpg
-        uses: crazy-max/ghaction-import-gpg@v7
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-        continue-on-error: true
-      - name: Check and update gomod2nix.toml
-        run: |
-          # Generate fresh gomod2nix.toml
-          direnv exec . gomod2nix generate
+          fetch-depth: 0
 
-          # Check if there are changes
-          if git diff --quiet gomod2nix.toml; then
-            echo "✅ gomod2nix.toml is up to date!"
-          else
-            echo "📝 gomod2nix.toml was updated"
-            git config --local user.email "$BOT_EMAIL"
-            git config --local user.name "$BOT_NAME"
-            git add gomod2nix.toml
-            if [ "${{ steps.import-gpg.outcome }}" == "success" ]; then
-              git commit -S -m "chore: update gomod2nix.toml" --no-verify
-            else
-              git commit -m "chore: update gomod2nix.toml" --no-verify
-            fi
-            git push
-            echo "✅ gomod2nix.toml has been updated and committed"
+      - name: Check if we should skip expensive jobs
+        id: check
+        run: |
+          BOT_NAME="${{ vars.BOT_NAME || 'super-smooth-bot' }}"
+          
+          # Only skip on pull_request events
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull request, running normally"
+            echo "should-skip=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
+          
+          # Check if go.mod was modified in this PR
+          git fetch origin ${{ github.base_ref }}
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "^go\\.mod$"; then
+            echo "go.mod was modified in this PR"
+            
+            # Check if this commit is by the bot
+            COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
+            if [ "$COMMIT_AUTHOR" = "$BOT_NAME" ]; then
+              echo "This is a bot commit, running normally"
+              echo "should-skip=false" >> $GITHUB_OUTPUT
+            else
+              echo "This is not a bot commit, skipping expensive jobs"
+              echo "should-skip=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "go.mod was not modified, running normally"
+            echo "should-skip=false" >> $GITHUB_OUTPUT
+          fi
+
   lint:
     name: Lint
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -102,8 +84,11 @@ jobs:
           fi
       - name: Run golangci-lint
         run: direnv exec . golangci-lint run ./...
+
   test:
     name: Test
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -129,8 +114,11 @@ jobs:
         run: direnv allow
       - name: Run tests
         run: direnv exec . go test -v ./...
+
   build-linux-x86_64:
     name: Build Linux x86_64
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -155,8 +143,11 @@ jobs:
         with:
           name: ntd-x86_64-linux
           path: result/bin/ntd
+
   build-linux-aarch64:
     name: Build Linux aarch64
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -189,8 +180,11 @@ jobs:
         with:
           name: ntd-aarch64-linux
           path: dist/ntd-aarch64-linux
+
   build-darwin:
     name: Build Darwin
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
     runs-on: macos-latest
     strategy:
       matrix:
