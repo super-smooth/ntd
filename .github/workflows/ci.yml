@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
       - name: Restore and save Nix store
@@ -35,6 +35,15 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Allow direnv
         run: direnv allow
+      - name: Import GPG key
+        id: import-gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+        continue-on-error: true
       - name: Check and update gomod2nix.toml
         run: |
           # Generate fresh gomod2nix.toml
@@ -48,7 +57,11 @@ jobs:
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
             git config --local user.name "github-actions[bot]"
             git add gomod2nix.toml
-            git commit -m "chore: update gomod2nix.toml" --no-verify
+            if [ "${{ steps.import-gpg.outcome }}" == "success" ]; then
+              git commit -S -m "chore: update gomod2nix.toml" --no-verify
+            else
+              git commit -m "chore: update gomod2nix.toml" --no-verify
+            fi
             git push
             echo "✅ gomod2nix.toml has been updated and committed"
           fi
