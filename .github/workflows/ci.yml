@@ -81,7 +81,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
@@ -118,7 +118,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
@@ -148,7 +148,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
@@ -177,7 +177,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
@@ -217,7 +217,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:

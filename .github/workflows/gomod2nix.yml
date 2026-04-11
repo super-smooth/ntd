@@ -41,7 +41,7 @@ jobs:
 
       - name: Install Nix
         if: steps.check-go-mod.outputs.go-mod-changed == 'true'
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31.10.4
 
       - name: Restore and save Nix store
         if: steps.check-go-mod.outputs.go-mod-changed == 'true'
