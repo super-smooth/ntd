@@ -116,12 +116,9 @@ jobs:
       - name: Run tests
         run: direnv exec . go test -v ./...
 
-  build-linux:
-    name: Build Linux
+  build-linux-x86_64:
+    name: Build Linux x86_64
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x86_64, aarch64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -139,12 +136,47 @@ jobs:
           purge-last-accessed: 0
           purge-primary-key: never
       - name: Build with Nix
-        run: nix build .#packages.${{ matrix.arch }}-linux.default
+        run: nix build .#packages.x86_64-linux.default
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ntd-${{ matrix.arch }}-linux
+          name: ntd-x86_64-linux
           path: result/bin/ntd
+
+  build-linux-aarch64:
+    name: Build Linux aarch64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+      - name: Install direnv
+        run: |
+          curl -sfL https://direnv.net/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Allow direnv
+        run: direnv allow
+      - name: Build aarch64 binary with Go cross-compilation
+        run: |
+          mkdir -p dist
+          direnv exec . bash -c 'GOOS=linux GOARCH=arm64 go build -o dist/ntd-aarch64-linux ./cmd/ntd'
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ntd-aarch64-linux
+          path: dist/ntd-aarch64-linux
 
   build-darwin:
     name: Build Darwin
