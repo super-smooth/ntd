@@ -9,15 +9,34 @@ on:
 jobs:
   check-gomod2nix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        token: ${{ secrets.GITHUB_TOKEN }}
     - uses: cachix/install-nix-action@v31.8.2
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
     
-    - name: Check gomod2nix.toml is up to date
+    - name: Check and update gomod2nix.toml
       run: |
-        nix develop --command ./scripts/check-gomod2nix.sh
+        # Generate fresh gomod2nix.toml
+        nix develop --command gomod2nix generate
+        
+        # Check if there are changes
+        if git diff --quiet gomod2nix.toml; then
+          echo "✅ gomod2nix.toml is up to date!"
+        else
+          echo "📝 gomod2nix.toml was updated"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add gomod2nix.toml
+          git commit -m "chore: update gomod2nix.toml"
+          git push
+          echo "✅ gomod2nix.toml has been updated and committed"
+        fi
 
   lint:
     runs-on: ubuntu-latest
