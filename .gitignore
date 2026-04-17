@@ -10,7 +10,7 @@ vendor/
 go.work
 
 # Build outputs
-result/
+result
 dist/
 
 # IDE

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -133,6 +133,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.Config.NoSudo,
 					)
 
+					// Write command to file if NTD_OUTPUT_FILE is set
+					if outputFile := os.Getenv("NTD_OUTPUT_FILE"); outputFile != "" {
+						os.WriteFile(outputFile, []byte(m.Deployer.GenerateCommand()), 0644)
+					}
+
 					// Output command and exit immediately
 					return m, tea.Quit
 				}
@@ -159,11 +164,8 @@ func (m Model) View() string {
 		return m.AppStyle.Render(m.HostList.View())
 	case StateCompleted:
 		if m.Deployer != nil {
-			return m.AppStyle.Render(fmt.Sprintf("\n%s\n\n%s\n\n%s\n",
-				m.TitleStyle.Render("Command generated:"),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("248")).Render(m.Deployer.GenerateCommand()),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Press any key to exit"),
-			))
+			// Output only the command to stdout (for shell wrapper)
+			return m.Deployer.GenerateCommand()
 		}
 		return ""
 	default:

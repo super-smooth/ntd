@@ -57,14 +57,28 @@ Usage:
 
 const shellFunc = `
 ntd() {
-  # Run ntd and capture the output (the generated command)
-  local cmd=$(command ntd "$@")
+  # Create temp file for command output
+  local tmpfile=$(mktemp)
   
-  # If we got a command back, print it to the terminal buffer
+  # Run ntd with temp file path, TUI displays normally
+  NTD_OUTPUT_FILE="$tmpfile" command ntd "$@"
+  
+  # Read the command from temp file
+  local cmd=""
+  if [ -f "$tmpfile" ]; then
+    cmd=$(cat "$tmpfile")
+    rm -f "$tmpfile"
+  fi
+  
+  # If we got a command back, push it to the input buffer
   if [ -n "$cmd" ]; then
-    # Print the command followed by a newline to make it executable
-    print -S "$cmd" 2>/dev/null || history -s "$cmd" 2>/dev/null
-    echo "$cmd"
+    # zsh: push to input buffer using zle
+    if [ -n "$ZSH_VERSION" ]; then
+      print -z "$cmd"
+    else
+      # bash: print command for user to copy
+      echo "$cmd"
+    fi
   fi
 }
 `
@@ -169,8 +183,12 @@ func runCLIMode(cfg *config.Config, flakeData *flake.Flake, hosts []tailscale.Ho
 	deployer := deploy.NewDeployer(flakeData.Path, cfg.Output, selectedHost.Hostname, isLocal, cfg.NoSudo)
 	cmd := deployer.GenerateCommand()
 
-	// Output the command (shell wrapper will put it in buffer)
-	fmt.Println(cmd)
+	// Write to file if NTD_OUTPUT_FILE is set, otherwise print to stdout
+	if outputFile := os.Getenv("NTD_OUTPUT_FILE"); outputFile != "" {
+		os.WriteFile(outputFile, []byte(cmd), 0644)
+	} else {
+		fmt.Println(cmd)
+	}
 
 	// Save to history
 	hist.Add(cfg.Output, cfg.Host)

@@ -41,17 +41,12 @@ To have commands automatically added to your shell history, add this to your she
 eval "$(ntd init)"
 ```
 
-**For bash (~/.bashrc):**
-```bash
-eval "$(ntd init)"
-```
-
 Then reload your shell:
 ```bash
-source ~/.zshrc  # or ~/.bashrc
+source ~/.zshrc
 ```
 
-Without the shell integration, `ntd` will simply output the command to stdout for you to copy/paste.
+**Note:** With zsh, the generated command is automatically pushed to your input buffer, ready to execute or edit. For other shells, the command is printed to stdout.
 
 ## Usage
 
