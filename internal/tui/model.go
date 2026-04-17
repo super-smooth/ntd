@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Write command to file if NTD_OUTPUT_FILE is set
 					if outputFile := os.Getenv("NTD_OUTPUT_FILE"); outputFile != "" {
-						os.WriteFile(outputFile, []byte(m.Deployer.GenerateCommand()), 0644)
+						os.WriteFile(outputFile, []byte(m.Deployer.GenerateCommand()), 0o644)
 					}
 
 					// Output command and exit immediately

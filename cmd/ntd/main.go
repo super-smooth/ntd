@@ -185,7 +185,7 @@ func runCLIMode(cfg *config.Config, flakeData *flake.Flake, hosts []tailscale.Ho
 
 	// Write to file if NTD_OUTPUT_FILE is set, otherwise print to stdout
 	if outputFile := os.Getenv("NTD_OUTPUT_FILE"); outputFile != "" {
-		os.WriteFile(outputFile, []byte(cmd), 0644)
+		os.WriteFile(outputFile, []byte(cmd), 0o644)
 	} else {
 		fmt.Println(cmd)
 	}
