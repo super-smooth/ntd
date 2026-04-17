@@ -133,9 +133,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.Config.NoSudo,
 					)
 
-					// Write command to file if NTD_OUTPUT_FILE is set
+					// Write command to file if NTD_OUTPUT_FILE is set (best effort)
 					if outputFile := os.Getenv("NTD_OUTPUT_FILE"); outputFile != "" {
-						os.WriteFile(outputFile, []byte(m.Deployer.GenerateCommand()), 0o644)
+						_ = os.WriteFile(outputFile, []byte(m.Deployer.GenerateCommand()), 0o644)
 					}
 
 					// Output command and exit immediately
