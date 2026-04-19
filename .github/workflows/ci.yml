@@ -149,9 +149,10 @@ jobs:
           purge-primary-key: never
       - name: Check formatting
         run: |
-          if [ "$(nix develop --command gofumpt -l . | wc -l)" -gt 0 ]; then
+          OUTPUT=$(nix develop --command gofumpt -l .)
+          if [ -n "$OUTPUT" ]; then
             echo "The following files are not formatted:"
-            nix develop --command gofumpt -l .
+            echo "$OUTPUT"
             exit 1
           fi
       - name: Run golangci-lint
