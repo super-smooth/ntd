@@ -13,7 +13,6 @@ pre-commit:
     lint:
       run: golangci-lint run --fix
     format:
-      glob: "*.go"
-      run: gofumpt -w {staged_files}
+      run: gofumpt -l -w .
     git-add:
       run: git add -A

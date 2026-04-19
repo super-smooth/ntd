@@ -10,7 +10,7 @@ jobs:
     name: Check PR prerequisites
     runs-on: ubuntu-latest
     outputs:
-      should-skip: ${{ steps.check.outputs.should-skip }}
+      should-skip: ${{ steps.determine-skip.outputs.should-skip }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -48,28 +48,86 @@ jobs:
           echo "$CHANGED_FILES"
           echo ""
           
-          if echo "$CHANGED_FILES" | grep -q "^go\\.mod$"; then
-            echo "go.mod was modified in this PR"
-            
-            # Check if the HEAD commit is by the bot
-            COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
-            COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae')
-            echo "=== Commit details ==="
-            echo "Commit author name: '$COMMIT_AUTHOR'"
-            echo "Commit author email: '$COMMIT_EMAIL'"
-            echo "Expected bot name: '$BOT_NAME'"
-            echo ""
-            
-            if [ "$COMMIT_AUTHOR" = "$BOT_NAME" ]; then
-              echo "This is a bot commit, running normally"
-              echo "should-skip=false" >> $GITHUB_OUTPUT
-            else
-              echo "This is not a bot commit (author mismatch), skipping expensive jobs"
-              echo "should-skip=true" >> $GITHUB_OUTPUT
-            fi
-          else
+          if ! echo "$CHANGED_FILES" | grep -q "^go\\.mod$"; then
             echo "go.mod was not modified, running normally"
             echo "should-skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "go.mod was modified in this PR"
+          
+          # Check if the HEAD commit is by the bot
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
+          COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae')
+          echo "=== Commit details ==="
+          echo "Commit author name: '$COMMIT_AUTHOR'"
+          echo "Commit author email: '$COMMIT_EMAIL'"
+          echo "Expected bot name: '$BOT_NAME'"
+          echo ""
+          
+          if [ "$COMMIT_AUTHOR" = "$BOT_NAME" ]; then
+            echo "This is a bot commit, running normally"
+            echo "should-skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "This is not a bot commit, checking if gomod2nix.toml needs regeneration..."
+          echo "needs-gomod2nix-check=true" >> $GITHUB_OUTPUT
+
+      - name: Install Nix
+        if: steps.check.outputs.needs-gomod2nix-check == 'true'
+        uses: cachix/install-nix-action@v31.10.4
+
+      - name: Restore and save Nix store
+        if: steps.check.outputs.needs-gomod2nix-check == 'true'
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+
+      - name: Setup dev environment
+        if: steps.check.outputs.needs-gomod2nix-check == 'true'
+        run: nix develop --command true
+
+      - name: Check if gomod2nix.toml needs regeneration
+        id: gomod2nix-check
+        if: steps.check.outputs.needs-gomod2nix-check == 'true'
+        run: |
+          # Generate fresh gomod2nix.toml
+          nix develop --command gomod2nix generate
+          
+          # Check if there are changes
+          if git diff --quiet gomod2nix.toml; then
+            echo "✅ gomod2nix.toml is already up to date!"
+            echo "should-skip=false" >> $GITHUB_OUTPUT
+          else
+            echo "📝 gomod2nix.toml needs regeneration - skipping expensive jobs"
+            echo "should-skip=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set default skip value
+        id: set-default-skip
+        if: steps.check.outputs.needs-gomod2nix-check != 'true'
+        run: echo "should-skip=false" >> $GITHUB_OUTPUT
+
+      - name: Determine final skip value
+        id: determine-skip
+        run: |
+          # Determine the final skip value based on which steps ran
+          if [ "${{ steps.check.outputs.needs-gomod2nix-check }}" == "true" ]; then
+            # gomod2nix-check step ran, use its output
+            echo "should-skip=${{ steps.gomod2nix-check.outputs.should-skip }}" >> $GITHUB_OUTPUT
+            echo "Final should-skip value: ${{ steps.gomod2nix-check.outputs.should-skip }}"
+          else
+            # gomod2nix-check didn't run, use the check step output
+            echo "should-skip=${{ steps.check.outputs.should-skip }}" >> $GITHUB_OUTPUT
+            echo "Final should-skip value: ${{ steps.check.outputs.should-skip }}"
           fi
 
   lint:
@@ -93,21 +151,20 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
-      - name: Install direnv
-        run: |
-          curl -sfL https://direnv.net/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Allow direnv
-        run: direnv allow
+      - name: Setup dev environment
+        run: nix develop --command true
+      - name: Run golangci-lint
+        run: nix develop --command golangci-lint run ./...
       - name: Check formatting
         run: |
-          if [ "$(direnv exec . gofumpt -l . | wc -l)" -gt 0 ]; then
+          OUTPUT=$(nix develop --command gofumpt -l .)
+          if [ -n "$OUTPUT" ]; then
             echo "The following files are not formatted:"
-            direnv exec . gofumpt -l .
+            echo "$OUTPUT"
             exit 1
           fi
-      - name: Run golangci-lint
-        run: direnv exec . golangci-lint run ./...
+      - name: Go vet
+        run: nix develop --command go vet ./...
 
   test:
     name: Test
@@ -130,14 +187,10 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
-      - name: Install direnv
-        run: |
-          curl -sfL https://direnv.net/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Allow direnv
-        run: direnv allow
+      - name: Setup dev environment
+        run: nix develop --command true
       - name: Run tests
-        run: direnv exec . go test -v ./...
+        run: nix develop --command go test -v ./...
 
   build-linux-x86_64:
     name: Build Linux x86_64
@@ -189,16 +242,10 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
-      - name: Install direnv
-        run: |
-          curl -sfL https://direnv.net/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Allow direnv
-        run: direnv allow
       - name: Build aarch64 binary with Go cross-compilation
         run: |
           mkdir -p dist
-          direnv exec . bash -c 'CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/ntd-aarch64-linux ./cmd/ntd'
+          nix develop --command bash -c 'CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/ntd-aarch64-linux ./cmd/ntd'
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

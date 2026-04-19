@@ -52,8 +52,8 @@
           shellHook = ''
             export CGO_ENABLED="1"
 
-            # Auto-install lefthook if in a git repo and lefthook.yml exists
-            if [ -d .git ] && [ -f lefthook.yml ]; then
+            # Auto-install lefthook if in a git repo and lefthook.yml exists (skip in CI)
+            if [ -z "$CI" ] && [ -d .git ] && [ -f lefthook.yml ]; then
               if ! lefthook version &> /dev/null; then
                 echo "⚠️  lefthook not found in PATH"
               elif [ ! -f .git/hooks/lefthook ] && [ ! -f .git/hooks/pre-commit ]; then
