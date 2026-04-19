@@ -55,6 +55,10 @@ jobs:
           purge-last-accessed: 0
           purge-primary-key: never
 
+      - name: Setup dev environment
+        if: steps.check-go-mod.outputs.go-mod-changed == 'true'
+        run: nix develop --command true
+
       - name: Import GPG key
         if: steps.check-go-mod.outputs.go-mod-changed == 'true'
         id: import-gpg

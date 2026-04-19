@@ -91,6 +91,10 @@ jobs:
           purge-last-accessed: 0
           purge-primary-key: never
 
+      - name: Setup dev environment
+        if: steps.check.outputs.needs-gomod2nix-check == 'true'
+        run: nix develop --command true
+
       - name: Check if gomod2nix.toml needs regeneration
         id: gomod2nix-check
         if: steps.check.outputs.needs-gomod2nix-check == 'true'
@@ -147,6 +151,10 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
+      - name: Setup dev environment
+        run: nix develop --command true
+      - name: Run golangci-lint
+        run: nix develop --command golangci-lint run ./...
       - name: Check formatting
         run: |
           OUTPUT=$(nix develop --command gofumpt -l .)
@@ -155,8 +163,8 @@ jobs:
             echo "$OUTPUT"
             exit 1
           fi
-      - name: Run golangci-lint
-        run: nix develop --command golangci-lint run ./...
+      - name: Go vet
+        run: nix develop --command go vet ./...
 
   test:
     name: Test
@@ -179,6 +187,8 @@ jobs:
           purge-created: 0
           purge-last-accessed: 0
           purge-primary-key: never
+      - name: Setup dev environment
+        run: nix develop --command true
       - name: Run tests
         run: nix develop --command go test -v ./...
 
