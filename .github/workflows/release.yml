@@ -12,8 +12,8 @@ jobs:
   build-linux-x86_64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31.8.2
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31.10.4
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build for x86_64-linux
@@ -21,7 +21,7 @@ jobs:
           nix build .#packages.x86_64-linux.default
           mkdir -p dist
           cp result/bin/ntd dist/ntd-x86_64-linux
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ntd-x86_64-linux
           path: dist/
@@ -29,15 +29,15 @@ jobs:
   build-linux-aarch64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31.8.2
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31.10.4
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build for aarch64-linux with Go cross-compilation
         run: |
           mkdir -p dist
           nix develop --command bash -c 'CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/ntd-aarch64-linux ./cmd/ntd'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ntd-aarch64-linux
           path: dist/
@@ -48,8 +48,8 @@ jobs:
       matrix:
         arch: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31.8.2
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31.10.4
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build for ${{ matrix.arch }}-darwin
@@ -57,7 +57,7 @@ jobs:
           nix build .#packages.${{ matrix.arch }}-darwin.default
           mkdir -p dist
           cp result/bin/ntd dist/ntd-${{ matrix.arch }}-darwin
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ntd-${{ matrix.arch }}-darwin
           path: dist/
@@ -66,8 +66,8 @@ jobs:
     needs: [build-linux-x86_64, build-linux-aarch64, build-darwin]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts/
       - name: Create archives
@@ -89,7 +89,7 @@ jobs:
               rm ntd
             fi
           done
-      - uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*.tar.gz
           generate_release_notes: true
@@ -103,13 +103,13 @@ jobs:
       id-token: write
     steps:
       - name: Federate token from Octo STS
-        uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
         id: octo-sts
         with:
           scope: super-smooth/homebrew-tap
           identity: update-ntd-version
       - name: Checkout homebrew-tap repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.octo-sts.outputs.token }}
           repository: super-smooth/homebrew-tap

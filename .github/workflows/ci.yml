@@ -13,7 +13,7 @@ jobs:
       should-skip: ${{ steps.determine-skip.outputs.should-skip }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           # Check out the actual PR head, not the merge commit
@@ -80,7 +80,7 @@ jobs:
 
       - name: Restore and save Nix store
         if: steps.check.outputs.needs-gomod2nix-check == 'true'
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -137,11 +137,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -154,7 +154,7 @@ jobs:
       - name: Setup dev environment
         run: nix develop --command true
       - name: Run golangci-lint
-        run: nix develop --command golangci-lint run ./...
+        run: nix develop --command golangci-lint run --timeout=5m ./...
       - name: Check formatting
         run: |
           OUTPUT=$(nix develop --command gofumpt -l .)
@@ -173,11 +173,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -189,8 +189,47 @@ jobs:
           purge-primary-key: never
       - name: Setup dev environment
         run: nix develop --command true
+      - name: Download dependencies
+        run: nix develop --command go mod download
       - name: Run tests
-        run: nix develop --command go test -v ./...
+        run: nix develop --command go test -v -race ./...
+
+  nix-build:
+    name: Nix Build
+    needs: check-prerequisites
+    if: needs.check-prerequisites.outputs.should-skip == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31.10.4
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 1G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+      - name: Check flake
+        run: nix flake check
+      - name: Build package
+        run: nix build .#default
+      - name: Test built binary
+        run: |
+          ./result/bin/ntd init
+      - name: Check flake.lock is up to date
+        run: |
+          nix flake update --commit-lock-file || true
+          if ! git diff --quiet flake.lock; then
+            echo "flake.lock is not up to date. Please run 'nix flake update' and commit the changes."
+            git diff flake.lock
+            exit 1
+          fi
 
   build-linux-x86_64:
     name: Build Linux x86_64
@@ -199,11 +238,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -216,7 +255,7 @@ jobs:
       - name: Build with Nix
         run: nix build .#packages.x86_64-linux.default
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ntd-x86_64-linux
           path: result/bin/ntd
@@ -228,11 +267,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -247,7 +286,7 @@ jobs:
           mkdir -p dist
           nix develop --command bash -c 'CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/ntd-aarch64-linux ./cmd/ntd'
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ntd-aarch64-linux
           path: dist/ntd-aarch64-linux
@@ -262,11 +301,11 @@ jobs:
         arch: [x86_64, aarch64]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Nix
         uses: cachix/install-nix-action@v31.10.4
       - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v6
+        uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', '**/go.sum', '**/gomod2nix.toml') }}
           restore-prefixes-first-match: nix-${{ runner.os }}-
@@ -279,7 +318,7 @@ jobs:
       - name: Build with Nix
         run: nix build .#packages.${{ matrix.arch }}-darwin.default
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ntd-${{ matrix.arch }}-darwin
           path: result/bin/ntd
